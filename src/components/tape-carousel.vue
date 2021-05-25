@@ -1,13 +1,16 @@
 <template>
   <div class="carousel">
-    <nav>
+    <nav v-if="false">
       <button
           class="nav prev"
-          @click="changeSlide('next')">Prev</button>
+          @click="changeSlide('next')">Prev
+      </button>
       <button
           class="nav next"
-          @click="changeSlide('prev')">Next</button>
+          @click="changeSlide('prev')">Next
+      </button>
     </nav>
+
     <div
         ref="figure"
         class="figure"
@@ -16,12 +19,17 @@
           v-for="item in items"
           :key="item.Id"
           ref="slides"
-          :src="item.Image.LargeUrl">
+          :src="item.Image.LargeUrl"
+          :class="{'carousel__slide_grabbing' : isDragging}"
+          class="carousel__slide"
+      >
     </div>
   </div>
 </template>
 
 <script>
+let startPositionX = 0;
+
 export default {
   name: "CarProjectTape",
   props: {
@@ -39,6 +47,10 @@ export default {
   data() {
     return {
       currImage: 0,
+      isDragging: false,
+      isSliding: false,
+      deltaX: 0,
+      isTouch: false,
     }
   },
 
@@ -68,7 +80,13 @@ export default {
 
   methods: {
     initCarousel() {
-      this.setupCarousel(this.n, parseFloat(getComputedStyle(this.$refs.slides[0]).width));
+      this.setupCarousel();
+
+      //add listeners
+      this.$refs.slides.forEach(slide => {
+        slide.addEventListener(this.isTouch ? 'touchstart' : 'mousedown', this.onDragStart);
+      });
+
       // window.addEventListener('resize', () => {
       //   setupCarousel(n, parseFloat(getComputedStyle(images[0]).width))
       // });
@@ -87,10 +105,8 @@ export default {
       this.rotateCarousel(this.currImage);
     },
 
-    setupCarousel(n, s) {
-      const apothem = s / (2 * Math.tan(Math.PI / this.n));
-
-      this.$refs.figure.style.transformOrigin = `50% 50% ${-apothem}px`;
+    setupCarousel() {
+      this.$refs.figure.style.transformOrigin = `50% 50% ${-this.apothem}px`;
 
       this.$refs.slides.forEach((_, i) => {
         this.$refs.slides[i].style.padding = `${this.gap}px`;
@@ -98,7 +114,7 @@ export default {
 
       this.$refs.slides.forEach((_, i) => {
         if (i > 0) {
-          this.$refs.slides[i].style.transformOrigin = `50% 50% ${-apothem}px`;
+          this.$refs.slides[i].style.transformOrigin = `50% 50% ${-this.apothem}px`;
           this.$refs.slides[i].style.transform = `rotateY(${i * this.theta}rad)`;
         }
       });
@@ -107,17 +123,61 @@ export default {
     },
 
     rotateCarousel(imageIndex) {
-      // this.$refs.figure.style.transform = `rotateY(${imageIndex * -this.theta}rad) rotateX(-11deg)`;
-      const slides = this.$refs.slides
-      const firstSlide = slides.shift()
-      slides.push(firstSlide)
-      slides.forEach((slide, i)=> {
-        slide.style.transform = `rotateY(${i * -this.theta}rad)`
-        slide.style.transformOrigin = `50% 50% ${-this.apothem}px`
-      })
-    }
-  },
+      if (!this.$refs.figure) {
+        return;
+      }
 
+      const newRotateY = imageIndex * -this.theta;
+      this.$refs.figure.style.transform = `rotateX(-11deg) rotateY(${newRotateY}rad)`;
+    },
+
+    onDragStart(event) {
+      event.preventDefault();
+
+      this.isDragging = true;
+      startPositionX = this.isTouch ? event.touches[0].clientX : event.clientX;
+
+      this.$refs.slides.forEach(slide => {
+        slide.addEventListener(this.isTouch ? 'touchmove' : 'mousemove', this.onDrag);
+        slide.addEventListener(this.isTouch ? 'touchend' : 'mouseup', this.onDragEnd);
+        slide.addEventListener('mouseleave', this.onDragEnd);
+      })
+    },
+
+    onDragEnd(event) {
+      if (!this.isTouch) {
+        event.preventDefault();
+      }
+
+      this.isDragging = this.isSliding =false;
+
+      this.$refs.slides.forEach(slide => {
+        slide.removeEventListener(this.isTouch ? 'touchmove' : 'mousemove', this.onDrag);
+        slide.removeEventListener(this.isTouch ? 'touchend' : 'mouseup', this.onDragEnd);
+        slide.removeEventListener('mouseleave', this.onDragEnd);
+      })
+
+    },
+
+    onDrag(event) {
+      if (this.isSliding) {
+        return;
+      }
+
+      if (!this.isTouch) {
+        event.preventDefault();
+      }
+
+      const currentPositionX = this.isTouch ? event.touches[0].clientX : event.clientX;
+      const deltaX = currentPositionX - startPositionX;
+
+      if (Math.abs(deltaX) > 50) {
+        this.isSliding = true;
+        let direction = deltaX > 0 ? 'prev' : 'next';
+        this.changeSlide(direction);
+      }
+    },
+  },
 }
 </script>
 
@@ -145,18 +205,17 @@ $viewer-distance: 500px;
     width: $item-width;
     transform-style: preserve-3d;
     transition: transform 0.5s;
+    will-change: transform;
     transform: rotateX(-11deg);
 
     img {
       transition: transform 0.5s;
-
+      will-change: transform;
       width: 100%;
       box-sizing: border-box;
       padding: 0 $item-separation / 2;
 
       &:not(:first-of-type) {
-        transition: transform 0.5s;
-
         position: absolute;
         left: 0;
         top: 0;
@@ -180,6 +239,14 @@ $viewer-distance: 500px;
       border: 1px solid;
       letter-spacing: 1px;
       padding: 5px 10px;
+    }
+  }
+
+  &__slide {
+    user-select: none;
+
+    &_grabbing {
+      cursor: grabbing;
     }
   }
 }
